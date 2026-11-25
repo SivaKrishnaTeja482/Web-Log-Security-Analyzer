@@ -1,0 +1,144 @@
+name: Test, build and publish
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TEST_IMAGE: web-log-security-analyzer:test
+  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+  PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+
+jobs:
+  test-build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies and run tests
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m unittest discover --start-directory tests --verbose
+
+      - name: Build container image
+        run: docker build --build-arg APP_VERSION="${GITHUB_SHA}" --tag "${TEST_IMAGE}" .
+
+      - name: Smoke-test container
+        run: |
+          set -eu
+          trap 'docker rm --force log-analyzer-test >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name log-analyzer-test --publish 8080:8080 "${TEST_IMAGE}"
+          for attempt in $(seq 1 30); do
+            health=$(curl --fail --silent http://127.0.0.1:8080/health || true)
+            version=$(curl --fail --silent http://127.0.0.1:8080/api/version || true)
+            if echo "$health" | grep --quiet '"status":"ok"' \
+              && echo "$version" | grep --quiet "${GITHUB_SHA}"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs log-analyzer-test
+          exit 1
+
+      - name: Configure AWS credentials with OIDC
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.AWS_ROLE_ARN != '' && env.AWS_REGION != '' && env.ECR_REPOSITORY != ''
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.AWS_ROLE_ARN != '' && env.AWS_REGION != '' && env.ECR_REPOSITORY != ''
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Publish commit and latest tags to Amazon ECR
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.AWS_ROLE_ARN != '' && env.AWS_REGION != '' && env.ECR_REPOSITORY != ''
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          set -eu
+          image="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          docker tag "${TEST_IMAGE}" "${image}:${GITHUB_SHA}"
+          docker tag "${TEST_IMAGE}" "${image}:latest"
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:latest"
+
+      - name: Note when Amazon ECR is not configured
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          (env.AWS_ROLE_ARN == '' || env.AWS_REGION == '' || env.ECR_REPOSITORY == '')
+        run: echo "AWS ECR publish is waiting for the repository secret and variables."
+
+      - name: Publish commit and latest tags to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "${TEST_IMAGE}" "${image}:${GITHUB_SHA}"
+          docker tag "${TEST_IMAGE}" "${image}:latest"
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:latest"
+
+      - name: Trigger Render image deployment
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --output /tmp/render-deploy-response.json \
+            "$RENDER_DEPLOY_HOOK_URL"
+          echo "Render accepted the deployment request."
+
+      - name: Note when Render is not configured
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.RENDER_DEPLOY_HOOK_URL == ''
+        run: echo "Render deploy hook is not configured yet; the GHCR image is ready."
+
+      - name: Verify the live deployment serves this commit
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          env.RENDER_DEPLOY_HOOK_URL != '' && env.PUBLIC_APP_URL != ''
+        run: |
+          set -eu
+          for attempt in $(seq 1 60); do
+            response=$(curl --max-time 10 --fail --silent \
+              "${PUBLIC_APP_URL%/}/api/version" || true)
+            if echo "$response" | grep --quiet "${GITHUB_SHA}"; then
+              echo "Cloud service is serving commit ${GITHUB_SHA}."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Cloud service did not serve ${GITHUB_SHA} within 10 minutes."
+          exit 1

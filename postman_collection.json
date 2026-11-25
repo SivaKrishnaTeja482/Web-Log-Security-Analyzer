@@ -1,0 +1,89 @@
+{
+  "info": {
+    "_postman_id": "4eece0d2-a45d-4c4e-a94f-995e4da90c29",
+    "name": "Web Log Security Analyzer",
+    "description": "Postman evidence for the B9IS121 containerised CI/CD project.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health - 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health",
+        "description": "Confirms that the deployed container is healthy."
+      }
+    },
+    {
+      "name": "Version - 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/version",
+        "description": "Returns the Git commit SHA embedded during the container build."
+      }
+    },
+    {
+      "name": "Sample logs - 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/sample",
+        "description": "Returns a safe synthetic sample using documentation-only IP ranges."
+      }
+    },
+    {
+      "name": "Analyse normal request - 200",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"log_text\": \"198.51.100.10 - - [25/Nov/2026:10:00:01 +0000] \\\"GET /dashboard HTTP/1.1\\\" 200 4210 \\\"-\\\" \\\"Mozilla/5.0\\\"\"\n}"
+        },
+        "url": "{{baseUrl}}/api/analyse",
+        "description": "Successful analysis with no configured security alert."
+      }
+    },
+    {
+      "name": "Analyse suspicious requests - 200",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"log_text\": \"192.0.2.88 - - [25/Nov/2026:10:03:01 +0000] \\\"GET /download?file=../../etc/passwd HTTP/1.1\\\" 400 221 \\\"-\\\" \\\"curl/8.5\\\"\\n192.0.2.99 - - [25/Nov/2026:10:04:01 +0000] \\\"GET /products?id=1%20UNION%20SELECT%20password%20FROM%20users HTTP/1.1\\\" 400 221 \\\"-\\\" \\\"curl/8.5\\\"\"\n}"
+        },
+        "url": "{{baseUrl}}/api/analyse",
+        "description": "Successful analysis that demonstrates traversal and SQL-injection signatures."
+      }
+    },
+    {
+      "name": "Invalid log payload - 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"log_text\": \"this is not a supported access-log line\"\n}"
+        },
+        "url": "{{baseUrl}}/api/analyse",
+        "description": "Expected 400 response proving that unsupported input is handled clearly."
+      }
+    }
+  ]
+}

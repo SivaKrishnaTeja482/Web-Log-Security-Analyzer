@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Analyse bounded Apache and Nginx access-log samples for explainable security indicators.">
+    <title>Web Log Security Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Web Log Security Analyzer home">
+        <span class="brand-mark" aria-hidden="true">WL</span>
+        <span>Web Log Security Analyzer</span>
+      </a>
+      <div class="service-state" id="service-state" aria-live="polite">Checking service</div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Defensive log triage</p>
+          <h1 id="page-title">Turn access logs into explainable security signals.</h1>
+          <p class="hero-copy">
+            Paste a bounded Apache or Nginx access-log sample. The analyzer summarizes traffic and applies transparent rules for authentication failures, reconnaissance, traversal, injection, and operational errors.
+          </p>
+        </div>
+        <dl class="scope-list" aria-label="Analyzer scope">
+          <div><dt>Processing</dt><dd>In memory only</dd></div>
+          <div><dt>Detection</dt><dd>Rule based</dd></div>
+          <div><dt>Limit</dt><dd>250 lines</dd></div>
+        </dl>
+      </section>
+
+      <section class="workspace" aria-label="Log analysis workspace">
+        <div class="panel input-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Input</p>
+              <h2>Access-log sample</h2>
+            </div>
+            <span class="format-label">Common / Combined</span>
+          </div>
+          <label for="log-input" class="sr-only">Apache or Nginx access-log text</label>
+          <textarea id="log-input" spellcheck="false" placeholder='198.51.100.10 - - [25/Nov/2026:10:00:01 +0000] "GET / HTTP/1.1" 200 4210 "-" "Mozilla/5.0"'></textarea>
+          <div class="input-meta">
+            <span id="line-count">0 lines</span>
+            <span>Input is not stored</span>
+          </div>
+          <div class="actions">
+            <button class="button primary" id="analyse-button" type="button">Analyse logs</button>
+            <button class="button secondary" id="sample-button" type="button">Load sample</button>
+            <button class="button ghost" id="clear-button" type="button">Clear</button>
+          </div>
+          <div class="message" id="message" role="status" aria-live="polite"></div>
+        </div>
+
+        <aside class="panel guide-panel" aria-labelledby="guide-title">
+          <p class="section-kicker">Detection guide</p>
+          <h2 id="guide-title">What the rules inspect</h2>
+          <ul class="rule-list">
+            <li><span class="rule-code">AUTH</span><span>Repeated 401 or 403 responses on authentication paths</span></li>
+            <li><span class="rule-code">RECON</span><span>Sensitive paths, scanners, and repeated missing resources</span></li>
+            <li><span class="rule-code">INPUT</span><span>Traversal, SQL injection, and cross-site scripting signatures</span></li>
+            <li><span class="rule-code">OPS</span><span>Server-side 5xx responses requiring operational review</span></li>
+          </ul>
+          <p class="guide-note">Indicators are evidence for investigation, not proof that an attack succeeded.</p>
+        </aside>
+      </section>
+
+      <section class="results" id="results" aria-labelledby="results-title" hidden>
+        <div class="results-heading">
+          <div>
+            <p class="section-kicker">Analysis</p>
+            <h2 id="results-title">Security overview</h2>
+          </div>
+          <div class="risk-badge" id="risk-badge">No risk</div>
+        </div>
+
+        <div class="metrics" id="metrics"></div>
+
+        <div class="results-grid">
+          <section class="panel result-panel" aria-labelledby="status-title">
+            <div class="panel-heading compact">
+              <h3 id="status-title">HTTP outcomes</h3>
+              <span id="parse-quality"></span>
+            </div>
+            <div class="status-bars" id="status-bars"></div>
+          </section>
+
+          <section class="panel result-panel" aria-labelledby="paths-title">
+            <div class="panel-heading compact">
+              <h3 id="paths-title">Top requested paths</h3>
+            </div>
+            <div class="path-list" id="path-list"></div>
+          </section>
+        </div>
+
+        <section class="alerts-section" aria-labelledby="alerts-title">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Findings</p>
+              <h2 id="alerts-title">Explainable alerts</h2>
+            </div>
+            <span id="alert-count"></span>
+          </div>
+          <div class="alert-list" id="alert-list"></div>
+        </section>
+      </section>
+
+      <section class="limitations" aria-labelledby="limitations-title">
+        <p class="section-kicker">Evaluation</p>
+        <h2 id="limitations-title">Known boundaries</h2>
+        <p>This educational tool analyses pasted batches with fixed signatures. It does not collect logs, inspect live traffic, enrich IP addresses, correlate across systems, or replace a SIEM. False positives and false negatives are possible.</p>
+      </section>
+    </main>
+
+    <footer>
+      <span>Stateless Flask service</span>
+      <a href="/api/version">Deployment version</a>
+      <a href="/health">Health endpoint</a>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+*.log
+.venv
+venv
+docs
+tests
+postman_collection.json
+README.md
