@@ -23,6 +23,27 @@ function makeElement(tag, className, text) {
   return element;
 }
 
+function encodeUtf8Base64(value) {
+  const bytes = new TextEncoder().encode(value);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function readJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    await response.text();
+    throw new Error(
+      `Server returned HTTP ${response.status} instead of JSON. Retry after the service is healthy.`,
+    );
+  }
+  return response.json();
+}
+
 function renderMetrics(data) {
   const metrics = document.querySelector("#metrics");
   const values = [
@@ -125,9 +146,11 @@ async function analyseLogs() {
     const response = await fetch("/api/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log_text: logInput.value }),
+      // Security logs can contain strings that edge filters interpret as live
+      // attacks. Base64 transports the evidence without changing its content.
+      body: JSON.stringify({ log_base64: encodeUtf8Base64(logInput.value) }),
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     if (!response.ok) throw new Error(payload.error || `Analysis failed (${response.status})`);
     renderResults(payload);
     const rejected = payload.summary.rejected_lines;
@@ -147,7 +170,7 @@ async function loadSample() {
   setMessage("Loading the synthetic sample…");
   try {
     const response = await fetch("/api/sample");
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     if (!response.ok) throw new Error("Could not load the sample");
     logInput.value = payload.log_text;
     updateLineCount();
@@ -164,7 +187,7 @@ async function checkHealth() {
   try {
     const response = await fetch("/health");
     if (!response.ok) throw new Error();
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     state.textContent = `Service healthy · ${payload.version.slice(0, 8)}`;
     state.className = "service-state healthy";
   } catch {

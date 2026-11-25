@@ -1,3 +1,4 @@
+import base64
 import os
 import unittest
 from unittest.mock import patch
@@ -53,6 +54,24 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertGreater(len(response.get_json()["alerts"]), 0)
+
+    def test_analyse_accepts_base64_log_transport(self):
+        encoded = base64.b64encode(SAMPLE_LOG.encode("utf-8")).decode("ascii")
+        response = self.client.post("/api/analyse", json={"log_base64": encoded})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["summary"]["parsed_lines"], 13)
+        alert_types = {alert["type"] for alert in response.get_json()["alerts"]}
+        self.assertIn("sql_injection_pattern", alert_types)
+        self.assertIn("unusual_http_method", alert_types)
+
+    def test_analyse_rejects_invalid_base64(self):
+        response = self.client.post(
+            "/api/analyse", json={"log_base64": "not valid base64!"}
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not valid Base64", response.get_json()["error"])
 
     def test_analyse_requires_json_object(self):
         response = self.client.post(

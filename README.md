@@ -28,7 +28,7 @@ Open `http://localhost:8080`.
 | `GET` | `/health` | Container health and version |
 | `GET` | `/api/version` | Deployed commit SHA |
 | `GET` | `/api/sample` | Synthetic demonstration logs |
-| `POST` | `/api/analyse` | Analyse `{ "log_text": "..." }` |
+| `POST` | `/api/analyse` | Analyse raw `log_text` or UTF-8 `log_base64` |
 
 Example:
 
@@ -37,6 +37,8 @@ curl --request POST http://localhost:8080/api/analyse \
   --header 'Content-Type: application/json' \
   --data '{"log_text":"198.51.100.10 - - [25/Nov/2026:10:00:01 +0000] \"GET / HTTP/1.1\" 200 4210 \"-\" \"Mozilla/5.0\""}'
 ```
+
+The browser uses `log_base64` because defensive samples can contain SQL-injection or traversal signatures that upstream security filters may otherwise treat as a live attack. The API retains `log_text` for straightforward Postman testing and backward compatibility.
 
 ## Docker
 

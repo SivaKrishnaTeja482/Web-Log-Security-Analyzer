@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 
 from flask import Flask, jsonify, render_template, request
@@ -14,7 +16,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
         JSON_SORT_KEYS=False,
-        MAX_CONTENT_LENGTH=MAX_INPUT_BYTES + 10_000,
+        # Base64 expands bytes by roughly one third. The analyzer still applies
+        # the stricter decoded 100 KB limit.
+        MAX_CONTENT_LENGTH=int(MAX_INPUT_BYTES * 1.5) + 10_000,
     )
     if test_config:
         app.config.update(test_config)
@@ -58,8 +62,19 @@ def create_app(test_config: dict | None = None) -> Flask:
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify(error="Request body must be a JSON object"), 400
+
+        log_text = payload.get("log_text")
+        if "log_base64" in payload:
+            encoded = payload["log_base64"]
+            if not isinstance(encoded, str) or not encoded:
+                return jsonify(error="log_base64 must be a non-empty Base64 string"), 400
+            try:
+                log_text = base64.b64decode(encoded, validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                return jsonify(error="log_base64 is not valid Base64-encoded UTF-8"), 400
+
         try:
-            result = analyse_log(payload.get("log_text"))
+            result = analyse_log(log_text)
         except AnalysisError as exc:
             return jsonify(error=str(exc)), exc.status_code
         return jsonify(result)
