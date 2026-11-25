@@ -41,7 +41,22 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("path_traversal_attempt", alert_types)
         self.assertIn("sql_injection_pattern", alert_types)
         self.assertIn("scanner_user_agent", alert_types)
+        self.assertIn("unusual_http_method", alert_types)
         self.assertEqual(result["risk"]["level"], "critical")
+
+    def test_detects_unusual_http_method(self):
+        line = (
+            '192.0.2.44 - - [25/Nov/2026:10:05:01 +0000] '
+            '"DELETE /api/users/42 HTTP/1.1" 405 198 "-" "curl/8.5"'
+        )
+
+        result = analyse_log(line)
+        alerts = result["alerts"]
+
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["type"], "unusual_http_method")
+        self.assertEqual(alerts[0]["severity"], "medium")
+        self.assertIn("DELETE /api/users/42", alerts[0]["evidence"])
 
     def test_reports_mixed_invalid_lines(self):
         result = analyse_log(f"bad line\n{NORMAL_LINE}")

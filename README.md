@@ -6,7 +6,7 @@ A stateless Flask dashboard that parses bounded Apache/Nginx access-log samples 
 
 - Parses Apache/Nginx common and combined access-log formats.
 - Summarises methods, HTTP outcomes, source counts and popular paths.
-- Detects repeated authentication failures, path enumeration, sensitive-resource probes, scanner user agents, traversal, SQL-injection and XSS patterns.
+- Detects repeated authentication failures, path enumeration, sensitive-resource probes, scanner user agents, unusual HTTP methods, traversal, SQL-injection and XSS patterns.
 - Returns clear `200`, `400` and `413` API responses for Postman evidence.
 - Stores no submitted logs and makes no external network calls.
 - Exposes the built Git SHA through `/api/version` for deployment traceability.

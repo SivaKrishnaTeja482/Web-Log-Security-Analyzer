@@ -62,7 +62,8 @@ SAMPLE_LOG = '''198.51.100.10 - - [25/Nov/2026:10:00:01 +0000] "GET / HTTP/1.1" 
 192.0.2.77 - - [25/Nov/2026:10:02:04 +0000] "GET /phpmyadmin HTTP/1.1" 404 153 "-" "sqlmap/1.8"
 192.0.2.77 - - [25/Nov/2026:10:02:05 +0000] "GET /backup.zip HTTP/1.1" 404 153 "-" "sqlmap/1.8"
 192.0.2.88 - - [25/Nov/2026:10:03:01 +0000] "GET /download?file=../../etc/passwd HTTP/1.1" 400 221 "-" "curl/8.5"
-192.0.2.99 - - [25/Nov/2026:10:04:01 +0000] "GET /products?id=1%20UNION%20SELECT%20password%20FROM%20users HTTP/1.1" 400 221 "-" "curl/8.5"'''
+192.0.2.99 - - [25/Nov/2026:10:04:01 +0000] "GET /products?id=1%20UNION%20SELECT%20password%20FROM%20users HTTP/1.1" 400 221 "-" "curl/8.5"
+192.0.2.44 - - [25/Nov/2026:10:05:01 +0000] "DELETE /api/users/42 HTTP/1.1" 405 198 "-" "curl/8.5"'''
 
 
 class AnalysisError(ValueError):
@@ -202,6 +203,16 @@ def _detect_alerts(entries: list[LogEntry]) -> list[dict[str, Any]]:
                 entry.ip,
                 "The user agent identifies a common reconnaissance or scanning tool.",
                 entry.user_agent,
+            )
+
+        if entry.method not in {"GET", "POST", "HEAD", "OPTIONS"}:
+            _record_alert(
+                alerts,
+                "unusual_http_method",
+                "medium",
+                entry.ip,
+                "The request used a method outside the configured common web-method set.",
+                f"{entry.method} {entry.target}",
             )
 
         if entry.status in {401, 403} and any(
